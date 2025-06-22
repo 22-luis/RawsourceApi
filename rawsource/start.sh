@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "Starting RawSource application on Railway..."
-echo "PORT: $PORT"
+echo "PORT: $PORT (default: 3000)"
 echo "SPRING_PROFILES_ACTIVE: railway"
 
 # Set the port explicitly
