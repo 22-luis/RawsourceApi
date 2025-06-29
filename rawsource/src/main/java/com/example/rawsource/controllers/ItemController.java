@@ -30,6 +30,7 @@ public class ItemController {
     }
 
     @PostMapping("/order/{orderId}/modify")
+    @PreAuthorize("hasAnyAuthority('BUYER', 'PROVIDER')")
     public ResponseEntity<?> modifyOrderItems(@PathVariable UUID orderId, @RequestBody AddItemToOrderDto modifyItemDto) {
         ItemDto result = itemService.addItemToOrder(orderId, modifyItemDto);
 

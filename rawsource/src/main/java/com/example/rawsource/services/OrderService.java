@@ -8,12 +8,15 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import com.example.rawsource.exceptions.ForbiddenException;
+import com.example.rawsource.exceptions.BadRequestException;
 import org.hibernate.validator.internal.util.logging.LoggerFactory;
 import org.slf4j.Logger;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import com.example.rawsource.entities.Item;
+import com.example.rawsource.entities.Inventory;
+import com.example.rawsource.entities.InventoryProduct;
 import com.example.rawsource.entities.Order;
 import com.example.rawsource.entities.Product;
 import com.example.rawsource.entities.Role;
@@ -24,11 +27,16 @@ import com.example.rawsource.entities.dto.item.AddItemDto;
 import com.example.rawsource.entities.dto.item.ItemDto;
 import com.example.rawsource.entities.dto.order.AddOrderDto;
 import com.example.rawsource.entities.dto.order.OrderDto;
+import com.example.rawsource.entities.dto.order.SendItemsDto;
 import com.example.rawsource.entities.dto.order.UpdateOrderStatusDto;
 import com.example.rawsource.repositories.ItemRepository;
 import com.example.rawsource.repositories.OrderRepository;
 import com.example.rawsource.repositories.ProductRepository;
 import com.example.rawsource.repositories.UserRepository;
+import com.example.rawsource.repositories.InventoryRepository;
+import com.example.rawsource.repositories.InventoryProductRepository;
+import com.example.rawsource.services.InventoryService;
+import com.example.rawsource.services.InventoryProductService;
 
 import jakarta.transaction.Transactional;
 
@@ -39,13 +47,23 @@ public class OrderService {
     private final UserRepository userRepository;
     private final ProductRepository productRepository;
     private final ItemRepository itemRepository;
+    private final InventoryRepository inventoryRepository;
+    private final InventoryProductRepository inventoryProductRepository;
+    private final InventoryService inventoryService;
+    private final InventoryProductService inventoryProductService;
 
     public OrderService(OrderRepository orderRepository, UserRepository userRepository,
-            ProductRepository productRepository, ItemRepository itemRepository) {
+            ProductRepository productRepository, ItemRepository itemRepository,
+            InventoryRepository inventoryRepository, InventoryProductRepository inventoryProductRepository,
+            InventoryService inventoryService, InventoryProductService inventoryProductService) {
         this.orderRepository = orderRepository;
         this.userRepository = userRepository;
         this.productRepository = productRepository;
         this.itemRepository = itemRepository;
+        this.inventoryRepository = inventoryRepository;
+        this.inventoryProductRepository = inventoryProductRepository;
+        this.inventoryService = inventoryService;
+        this.inventoryProductService = inventoryProductService;
     }
 
     public OrderDto createOrder(AddOrderDto orderInfo) {
@@ -172,6 +190,118 @@ public class OrderService {
             .collect(Collectors.toList());
         }
 
+    public OrderDto deliverItems(UUID orderId, SendItemsDto sendItemsDto) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String username = auth.getName();
+        User currentUser = userRepository.findByEmail(username)
+            .orElseThrow(() -> new RuntimeException("User not found"));
+
+        Order order = orderRepository.findById(orderId)
+            .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        if (!currentUser.getRole().equals(Role.PROVIDER)) {
+            throw new ForbiddenException("Only providers can deliver items");
+        }
+
+        if (order.getStatus() != Status.APPROVED) {
+            throw new ForbiddenException("Only approved orders can be delivered");
+        }
+
+        boolean hasProducts = order.getItems().stream()
+            .anyMatch(item -> item.getProduct().getProvider().getId().equals(currentUser.getId()));
+        
+        if (!hasProducts) {
+            throw new ForbiddenException("You don't have products in this order");
+        }
+
+        for (UUID itemId : sendItemsDto.getItemIds()) {
+            Item item = itemRepository.findById(itemId)
+                .orElseThrow(() -> new RuntimeException("Item not found"));
+
+            if (!item.getOrder().getId().equals(orderId)) {
+                throw new ForbiddenException("Item does not belong to this order");
+            }
+
+            if (!item.getProduct().getProvider().getId().equals(currentUser.getId())) {
+                throw new ForbiddenException("You can only deliver your own products");
+            }
+
+            // Transferir items del inventario del provider al buyer
+            transferItemToBuyer(item, order.getBuyer());
+        }
+
+        order.setStatus(Status.DELIVERED);
+        orderRepository.save(order);
+
+        return convertToDto(order, currentUser.getId());
+    }
+
+    public void deleteOrder(UUID orderId) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String username = auth.getName();
+        User currentUser = userRepository.findByEmail(username)
+            .orElseThrow(() -> new RuntimeException("User not found"));
+
+        Order order = orderRepository.findById(orderId)
+            .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        // Validar que el usuario es el buyer de la orden
+        if (!order.getBuyer().getId().equals(currentUser.getId())) {
+            throw new ForbiddenException("You can only delete your own orders");
+        }
+
+        // Validar que la orden está en estado PENDING
+        if (order.getStatus() != Status.PENDING) {
+            throw new BadRequestException("Only pending orders can be deleted");
+        }
+
+        // Eliminar la orden (los items se eliminan automáticamente por CASCADE)
+        orderRepository.delete(order);
+    }
+
+    private void transferItemToBuyer(Item item, User buyer) {
+        Product product = item.getProduct();
+        User provider = product.getProvider();
+        
+        // 1. Obtener inventario del provider
+        Inventory providerInventory = inventoryRepository.findByUser(provider)
+            .orElseThrow(() -> new RuntimeException("Provider inventory not found"));
+        
+        // 2. Obtener inventario del buyer (crear si no existe)
+        Inventory buyerInventory = inventoryRepository.findByUser(buyer)
+            .orElseGet(() -> {
+                Inventory newInventory = new Inventory();
+                newInventory.setUser(buyer);
+                newInventory.setName(buyer.getName() + "'s Inventory");
+                return inventoryRepository.save(newInventory);
+            });
+        
+        // 3. Descontar del inventario del provider
+        InventoryProduct providerInventoryProduct = inventoryProductRepository
+            .findByInventoryAndProduct(providerInventory, product)
+            .orElseThrow(() -> new RuntimeException("Product not found in provider inventory"));
+        
+        if (providerInventoryProduct.getQuantity() < item.getQuantity()) {
+            throw new RuntimeException("Insufficient stock in provider inventory");
+        }
+        
+        providerInventoryProduct.setQuantity(providerInventoryProduct.getQuantity() - item.getQuantity());
+        inventoryProductRepository.save(providerInventoryProduct);
+        
+        // 4. Agregar al inventario del buyer
+        InventoryProduct buyerInventoryProduct = inventoryProductRepository
+            .findByInventoryAndProduct(buyerInventory, product)
+            .orElseGet(() -> {
+                InventoryProduct newInventoryProduct = new InventoryProduct();
+                newInventoryProduct.setInventory(buyerInventory);
+                newInventoryProduct.setProduct(product);
+                newInventoryProduct.setQuantity(0);
+                return newInventoryProduct;
+            });
+        
+        buyerInventoryProduct.setQuantity(buyerInventoryProduct.getQuantity() + item.getQuantity());
+        inventoryProductRepository.save(buyerInventoryProduct);
+    }
 
     private OrderDto convertToDto(Order order, UUID providerId) {
         OrderDto dto = new OrderDto();
