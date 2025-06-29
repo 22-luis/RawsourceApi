@@ -1,6 +1,7 @@
 package com.example.rawsource.controllers;
 
 import com.example.rawsource.entities.dto.inventory.AddInventoryDto;
+import com.example.rawsource.entities.dto.inventory.DeliverOrderDto;
 import com.example.rawsource.entities.dto.inventory.InventoryDto;
 import com.example.rawsource.entities.dto.inventory.UpdateInventoryDto;
 import com.example.rawsource.services.InventoryService;
@@ -63,6 +64,13 @@ public class InventoryController {
     @PreAuthorize("hasAuthority('ADMIN')")
     public ResponseEntity<List<InventoryDto>> getAllInventories() {
         return ResponseEntity.ok(inventoryService.getAllInventories());
+    }
+
+    @PostMapping("/deliver-order")
+    @PreAuthorize("hasAuthority('PROVIDER')")
+    public ResponseEntity<?> deliverOrder(@RequestBody DeliverOrderDto deliverOrderDto) {
+        inventoryService.deliverOrder(deliverOrderDto);
+        return ResponseEntity.ok("Order delivered successfully");
     }
 
     @PutMapping("/{id}")

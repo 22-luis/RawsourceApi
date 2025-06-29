@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.*;
 
 import com.example.rawsource.entities.dto.order.AddOrderDto;
 import com.example.rawsource.entities.dto.order.OrderDto;
-import com.example.rawsource.entities.dto.order.SendItemsDto;
 import com.example.rawsource.entities.dto.order.UpdateOrderStatusDto;
 import com.example.rawsource.services.OrderService;
 
@@ -67,15 +66,6 @@ public class OrderController {
     public ResponseEntity<List<OrderDto>> getProviderOrders() {
         List<OrderDto> orders = orderService.getOrdersByProvider();
         return ResponseEntity.ok(orders);
-    }
-
-    @PostMapping("/{orderId}/deliver")
-    @PreAuthorize("hasAuthority('PROVIDER')")
-    public ResponseEntity<OrderDto> deliverItems(
-            @PathVariable UUID orderId,
-            @RequestBody SendItemsDto sendItemsDto) {
-        OrderDto deliveredOrder = orderService.deliverItems(orderId, sendItemsDto);
-        return ResponseEntity.ok(deliveredOrder);
     }
 
     @DeleteMapping("/{orderId}")

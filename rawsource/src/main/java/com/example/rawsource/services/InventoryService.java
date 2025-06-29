@@ -1,6 +1,7 @@
 package com.example.rawsource.services;
 
 import com.example.rawsource.entities.dto.inventory.AddInventoryDto;
+import com.example.rawsource.entities.dto.inventory.DeliverOrderDto;
 import com.example.rawsource.entities.dto.inventory.InventoryDto;
 import com.example.rawsource.entities.dto.inventory.UpdateInventoryDto;
 
@@ -26,4 +27,6 @@ public interface InventoryService {
     boolean isCurrentUserInventory(UUID inventoryId);
     
     InventoryDto convertToDto(com.example.rawsource.entities.Inventory inventory);
+    
+    void deliverOrder(DeliverOrderDto deliverOrderDto);
 } 
