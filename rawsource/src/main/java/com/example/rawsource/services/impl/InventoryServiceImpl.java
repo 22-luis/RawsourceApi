@@ -228,11 +228,16 @@ public class InventoryServiceImpl implements InventoryService {
         // 3. Descontar del inventario del provider
         InventoryProduct providerInventoryProduct = inventoryProductRepository
             .findByInventoryAndProduct(providerInventory, product)
-            .orElseThrow(() -> new RuntimeException("Product not found in provider inventory"));
-        
-        if (providerInventoryProduct.getQuantity() < item.getQuantity()) {
-            throw new RuntimeException("Insufficient stock in provider inventory");
-        }
+            .orElseGet(() -> {
+                InventoryProduct newInventoryProduct = new InventoryProduct();
+                newInventoryProduct.setInventory(providerInventory);
+                newInventoryProduct.setProduct(product);
+                newInventoryProduct.setQuantity(0);
+                newInventoryProduct.setDate(LocalDate.now());
+                newInventoryProduct.setMinimumStock(0);
+                newInventoryProduct.setStatus(Status.ACTIVE);
+                return inventoryProductRepository.save(newInventoryProduct);
+            });
         
         providerInventoryProduct.setQuantity(providerInventoryProduct.getQuantity() - item.getQuantity());
         inventoryProductRepository.save(providerInventoryProduct);

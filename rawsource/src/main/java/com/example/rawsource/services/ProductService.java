@@ -9,6 +9,11 @@ import com.example.rawsource.exceptions.ForbiddenException;
 import com.example.rawsource.exceptions.ResourceNotFoundException;
 import com.example.rawsource.repositories.ProductRepository;
 import com.example.rawsource.repositories.UserRepository;
+import com.example.rawsource.repositories.InventoryRepository;
+import com.example.rawsource.repositories.InventoryProductRepository;
+import com.example.rawsource.entities.Inventory;
+import com.example.rawsource.entities.InventoryProduct;
+import com.example.rawsource.entities.Status;
 import com.example.rawsource.utils.SecureLogger;
 
 import org.springframework.security.core.Authentication;
@@ -19,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.time.LocalDate;
 
 @Service
 @Transactional
@@ -26,10 +32,14 @@ public class ProductService {
 
     private final UserRepository userRepository;
     private final ProductRepository productRepository;
+    private final InventoryRepository inventoryRepository;
+    private final InventoryProductRepository inventoryProductRepository;
 
-    public ProductService(ProductRepository productRepository, UserRepository userRepository) {
+    public ProductService(ProductRepository productRepository, UserRepository userRepository, InventoryRepository inventoryRepository, InventoryProductRepository inventoryProductRepository) {
         this.productRepository = productRepository;
         this.userRepository = userRepository;
+        this.inventoryRepository = inventoryRepository;
+        this.inventoryProductRepository = inventoryProductRepository;
     }
 
     public ProductDto createProduct(AddProductDto productInfo) {
@@ -52,6 +62,28 @@ public class ProductService {
         product.setProvider(provider);
 
         Product savedProduct = productRepository.save(product);
+
+        Inventory inventory = inventoryRepository.findByUser(provider)
+            .orElseGet(() -> {
+                Inventory newInventory = new Inventory();
+                newInventory.setUser(provider);
+                newInventory.setName("Inventario de " + provider.getName());
+                newInventory.setDate(LocalDate.now());
+                newInventory.setIsActive(true);
+                return inventoryRepository.save(newInventory);
+            });
+
+        if (!inventoryProductRepository.existsByInventoryAndProduct(inventory, savedProduct)) {
+            InventoryProduct inventoryProduct = new InventoryProduct();
+            inventoryProduct.setInventory(inventory);
+            inventoryProduct.setProduct(savedProduct);
+            inventoryProduct.setQuantity(0);
+            inventoryProduct.setDate(LocalDate.now());
+            inventoryProduct.setMinimumStock(0);
+            inventoryProduct.setStatus(Status.ACTIVE);
+            inventoryProductRepository.save(inventoryProduct);
+        }
+
         return convertToDto(savedProduct);
     }
 

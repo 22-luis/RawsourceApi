@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.time.LocalDate;
 
 import com.example.rawsource.exceptions.ForbiddenException;
 import com.example.rawsource.exceptions.BadRequestException;
@@ -282,7 +283,16 @@ public class OrderService {
         // 3. Descontar del inventario del provider
         InventoryProduct providerInventoryProduct = inventoryProductRepository
             .findByInventoryAndProduct(providerInventory, product)
-            .orElseThrow(() -> new RuntimeException("Product not found in provider inventory"));
+            .orElseGet(() -> {
+                InventoryProduct newInventoryProduct = new InventoryProduct();
+                newInventoryProduct.setInventory(providerInventory);
+                newInventoryProduct.setProduct(product);
+                newInventoryProduct.setQuantity(0);
+                newInventoryProduct.setDate(LocalDate.now());
+                newInventoryProduct.setMinimumStock(0);
+                newInventoryProduct.setStatus(Status.ACTIVE);
+                return inventoryProductRepository.save(newInventoryProduct);
+            });
         
         providerInventoryProduct.setQuantity(providerInventoryProduct.getQuantity() - item.getQuantity());
         inventoryProductRepository.save(providerInventoryProduct);
