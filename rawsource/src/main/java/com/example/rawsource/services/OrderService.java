@@ -135,13 +135,16 @@ public class OrderService {
             Status newStatus = updateDto.getNewStatus();
 
             if (newStatus == Status.APPROVED){
-                if (!currrentUser.getRole().equals(Role.ADMIN)) {
-                    throw new SecurityException("Only admins can aprove orders");
+                if (!currrentUser.getRole().equals(Role.PROVIDER)) {
+                    throw new SecurityException("Only provider can aprove orders");
                 }
             }
             if (newStatus == Status.CANCELLED) {
-                if (!order.getBuyer().getId().equals(currrentUser.getId())) {
-                    throw new SecurityException("Only Buyer can cancel the order");
+                boolean isBuyer = order.getBuyer().getId().equals(currrentUser.getId());
+                boolean isProviderInOrder = order.getItems().stream()
+                    .anyMatch(item -> item.getProduct().getProvider().getId().equals(currrentUser.getId()));
+                if (!isBuyer && !isProviderInOrder) {
+                    throw new SecurityException("Only Buyer or Provider in this order can cancel the order");
                 }
             }
 
