@@ -281,10 +281,6 @@ public class OrderService {
             .findByInventoryAndProduct(providerInventory, product)
             .orElseThrow(() -> new RuntimeException("Product not found in provider inventory"));
         
-        if (providerInventoryProduct.getQuantity() < item.getQuantity()) {
-            throw new RuntimeException("Insufficient stock in provider inventory");
-        }
-        
         providerInventoryProduct.setQuantity(providerInventoryProduct.getQuantity() - item.getQuantity());
         inventoryProductRepository.save(providerInventoryProduct);
         
