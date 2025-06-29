@@ -46,7 +46,7 @@ public class OrderController {
     }
 
     @PutMapping("/{id}/status")
-    @PreAuthorize("hasAnyAuthority('ADMIN', 'BUYER')")
+    @PreAuthorize("hasAnyAuthority('PROVIDER', 'BUYER')")
     public ResponseEntity<OrderDto> updateOrderStatus(
             @PathVariable UUID id,
             @RequestBody UpdateOrderStatusDto updateOrderDto) {
