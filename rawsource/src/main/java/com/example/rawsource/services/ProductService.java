@@ -118,7 +118,8 @@ public class ProductService {
         User provider = userRepository.findByEmail(username)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "email", username));
 
-        if (!existingProduct.getProvider().getId().equals(provider.getId())) {
+        if (!existingProduct.getProvider().getId().equals(provider.getId()) && 
+            !provider.getRole().name().equals("ADMIN")) {
             throw new ForbiddenException("You are not allowed to delete this product");
         }
 
